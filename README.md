@@ -1,2 +1,2 @@
-# go-normalize-email
+# gonormail
 normalize email with Go
