@@ -3,6 +3,7 @@ package gonormail
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 const (
@@ -15,26 +16,43 @@ const (
 )
 
 type NormalizeFunc func(string) string
+type NormalizeFuncs []NormalizeFunc
 
-var defaultFuncs = []NormalizeFunc{strings.ToLower}
-var gmailLocalFuncs = []NormalizeFunc{DeleteDots, CutPlusRight}
+var defaultFuncs = NormalizeFuncs{strings.ToLower}
+var gmailLocalFuncs = NormalizeFuncs{DeleteDots, CutPlusRight}
 var defaultNormalizer = DefaultNormalizer()
 
 type Normalizer struct {
-	localFuncs         []NormalizeFunc
-	domainFuncs        []NormalizeFunc
-	localFuncsByDomain map[string][]NormalizeFunc
+	mux                sync.Mutex
+	localFuncs         NormalizeFuncs
+	domainFuncs        NormalizeFuncs
+	localFuncsByDomain map[string]NormalizeFuncs
 }
 
 func DefaultNormalizer() *Normalizer {
-	return NewNormalizer(defaultFuncs, defaultFuncs, map[string][]NormalizeFunc{
+	return NewNormalizer(defaultFuncs, defaultFuncs, map[string]NormalizeFuncs{
 		DomainGmail:      gmailLocalFuncs,
 		DomainGmailAlias: gmailLocalFuncs,
 	})
 }
 
-func NewNormalizer(localFuncs, domainFuncs []NormalizeFunc, funcMap map[string][]NormalizeFunc) *Normalizer {
-	return &Normalizer{localFuncs: localFuncs, domainFuncs: domainFuncs, localFuncsByDomain: funcMap}
+func NewNormalizer(localFuncs, domainFuncs NormalizeFuncs, localFuncsByDomain map[string]NormalizeFuncs) *Normalizer {
+	normalizedMap := make(map[string]NormalizeFuncs, len(localFuncsByDomain))
+	for domain, lfuncs := range localFuncsByDomain {
+		ndomain := normalize(domainFuncs, domain)
+		if _, ok := normalizedMap[ndomain]; ok {
+			panic("duplicated normalized domain")
+		}
+		normalizedMap[ndomain] = lfuncs
+	}
+	return &Normalizer{localFuncs: localFuncs, domainFuncs: domainFuncs, localFuncsByDomain: normalizedMap}
+}
+
+func normalize(funcs NormalizeFuncs, str string) string {
+	for _, fuc := range funcs {
+		str = fuc(str)
+	}
+	return str
 }
 
 func (n *Normalizer) Normalize(email string) string {
@@ -43,24 +61,32 @@ func (n *Normalizer) Normalize(email string) string {
 		return email
 	}
 
-	localPart, domainPart := splitted[0], splitted[1]
-	for _, f := range n.domainFuncs {
-		domainPart = f(domainPart)
-	}
-
-	for _, f := range n.localFuncs {
-		localPart = f(localPart)
-	}
+	domainPart := normalize(n.localFuncs, splitted[1])
+	localPart := normalize(n.domainFuncs, splitted[0])
 
 	if n.localFuncsByDomain != nil {
 		if funcs, ok := n.localFuncsByDomain[domainPart]; ok {
-			for _, f := range funcs {
-				localPart = f(localPart)
-			}
+			localPart = normalize(funcs, localPart)
 		}
 	}
 
 	return fmt.Sprintf("%s%s%s", localPart, AT, domainPart)
+}
+
+func (n *Normalizer) RegisterLocalFuncs(domain string, funcs ...NormalizeFunc) {
+	n.mux.Lock()
+	defer n.mux.Unlock()
+
+	if n.localFuncsByDomain == nil {
+		n.localFuncsByDomain = map[string]NormalizeFuncs{}
+	}
+
+	domain = normalize(n.domainFuncs, domain)
+	if existing, ok := n.localFuncsByDomain[domain]; ok {
+		existing = append(existing, funcs...)
+	} else {
+		n.localFuncsByDomain[domain] = funcs
+	}
 }
 
 func Normalize(email string) string {
