@@ -1,6 +1,7 @@
 package gonormail
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,66 +9,85 @@ import (
 )
 
 func TestDefaultNormalizer(t *testing.T) {
-	tests := []struct {
-		name string
-		want *Normalizer
-	}{
-		{
-			want: &Normalizer{
-				localFuncs:  defaultFuncs,
-				domainFuncs: defaultFuncs,
-				localFuncsByDomain: map[string]NormalizeFuncs{
-					DomainGmail:      gmailLocalFuncs,
-					DomainGmailAlias: gmailLocalFuncs,
-				},
-			},
+	want := &Normalizer{
+		localFuncs:  defaultFuncs,
+		domainFuncs: defaultFuncs,
+		localFuncsByDomain: map[string]NormalizeFuncs{
+			domainGmail:      gmailLocalFuncs,
+			domainGmailAlias: gmailLocalFuncs,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, DefaultNormalizer(), "DefaultNormalizer")
-		})
-	}
+	assert.Equal(t, want, DefaultNormalizer(), "DefaultNormalizer")
 }
 
-func TestNewNormalizer(t *testing.T) {
-	domainFuncs := NormalizeFuncs{strings.ToLower}
-	localFuncs := NormalizeFuncs{strings.ToUpper}
-	funcMap := map[string]NormalizeFuncs{"whatever.com": {strings.ToTitle}}
-
+func TestNormalizer_RegisterLocalFuncs(t *testing.T) {
+	type fields struct {
+		localFuncs         NormalizeFuncs
+		domainFuncs        NormalizeFuncs
+		localFuncsByDomain map[string]NormalizeFuncs
+	}
 	type args struct {
-		localFuncs  NormalizeFuncs
-		domainFuncs NormalizeFuncs
-		funcMap     map[string]NormalizeFuncs
+		domain string
+		funcs  []NormalizeFunc
 	}
 	tests := []struct {
-		name string
-		args args
-		want *Normalizer
+		fields fields
+		argss  []args
+		email  string
+		want   string
 	}{
 		{
-			name: "empty func",
-			args: args{
-				localFuncs:  NormalizeFuncs{},
-				domainFuncs: NormalizeFuncs{},
-				funcMap:     map[string]NormalizeFuncs{},
+			fields: fields{
+				localFuncs:         nil,
+				domainFuncs:        nil,
+				localFuncsByDomain: nil,
 			},
-			want: &Normalizer{localFuncs: NormalizeFuncs{}, domainFuncs: NormalizeFuncs{},
-				localFuncsByDomain: map[string]NormalizeFuncs{}},
+			argss: []args{
+				{
+					domain: "",
+					funcs:  nil,
+				},
+				{
+					domain: "",
+					funcs:  nil,
+				},
+			},
+			email: "abc@email.com",
+			want:  "abc@email.com",
 		},
 		{
-			name: "same func",
-			args: args{
-				localFuncs:  localFuncs,
-				domainFuncs: domainFuncs,
-				funcMap:     funcMap,
+			fields: fields{
+				localFuncs:         defaultFuncs,
+				domainFuncs:        defaultFuncs,
+				localFuncsByDomain: nil,
 			},
-			want: &Normalizer{localFuncs: localFuncs, domainFuncs: domainFuncs, localFuncsByDomain: funcMap},
+			argss: []args{
+				{
+					domain: "email.COM",
+					funcs: NormalizeFuncs{
+						func(s string) string { return s + "+" },
+						func(s string) string { return s + "m" },
+					},
+				},
+				{
+					domain: "EMAIL.com",
+					funcs: NormalizeFuncs{
+						nil,
+						func(s string) string { return s + "n" },
+					},
+				},
+			},
+			email: "ABC@EMAIL.COM",
+			want:  "abc+mn@email.com",
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, NewNormalizer(tt.args.domainFuncs, tt.args.localFuncs, tt.args.funcMap), "NewNormalizer")
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			n := NewNormalizer(tt.fields.domainFuncs, tt.fields.localFuncs, tt.fields.localFuncsByDomain)
+			for _, args := range tt.argss {
+				n = n.RegisterLocalFuncs(args.domain, args.funcs...)
+			}
+			assert.Equal(t, tt.want, n.Normalize(tt.email), "RegisterLocalFuncs.Normalize()")
 		})
 	}
 }
@@ -78,141 +98,133 @@ func TestNormalizer_Normalize(t *testing.T) {
 		domainFuncs        NormalizeFuncs
 		localFuncsByDomain map[string]NormalizeFuncs
 	}
-	type args struct {
-		email string
-	}
 	tests := []struct {
-		name   string
 		fields fields
-		args   args
+		email  string
 		want   string
 	}{
-		// TODO: Add test cases.
+		{
+			fields: fields{
+				localFuncs:         nil,
+				domainFuncs:        nil,
+				localFuncsByDomain: nil,
+			},
+			email: "abc@email.com",
+			want:  "abc@email.com",
+		},
+		{
+			fields: fields{
+				localFuncs:         nil,
+				domainFuncs:        nil,
+				localFuncsByDomain: map[string]NormalizeFuncs{"email.com": nil},
+			},
+			email: "abc@email.com",
+			want:  "abc@email.com",
+		},
+		{
+			fields: fields{
+				localFuncs:  NormalizeFuncs{strings.ToUpper},
+				domainFuncs: NormalizeFuncs{strings.ToUpper},
+				localFuncsByDomain: map[string]NormalizeFuncs{
+					"EMAIL.COM": NormalizeFuncs{func(s string) string { return s + "+s" }},
+				},
+			},
+			email: "abc@email.com",
+			want:  "ABC+s@EMAIL.COM",
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			n := NewNormalizer(tt.fields.domainFuncs, tt.fields.localFuncs, tt.fields.localFuncsByDomain)
-			assert.Equal(t, tt.want, n.Normalize(tt.args.email), "Normalizer.Normalize()")
+			assert.Equal(t, tt.want, n.Normalize(tt.email), "Normalizer.Normalize()")
 		})
 	}
 }
 
 func TestNormalize(t *testing.T) {
-	type args struct {
-		email string
-	}
 	tests := []struct {
-		name string
-		args args
-		want string
+		email string
+		want  string
 	}{
-		{args: args{email: "not.A.email"}, want: "not.A.email"},
-		{args: args{email: "not@@Email"}, want: "not@@Email"},
-		{args: args{email: "abcd@email.com"}, want: "abcd@email.com"},
-		{args: args{email: "Abcd@Email.com"}, want: "abcd@email.com"},
-		{args: args{email: "A.B.C.D+001@Gmail.com"}, want: "abcd@gmail.com"},
-		{args: args{email: "A.B.C..D+001@googlemail.com"}, want: "abcd@googlemail.com"},
+		{email: "not.A.email", want: "not.A.email"},
+		{email: "not@@Email", want: "not@@Email"},
+		{email: "abcd@email.com", want: "abcd@email.com"},
+		{email: "Abcd@Email.com", want: "abcd@email.com"},
+		{email: "A.B.C.D+001@Gmail.com", want: "abcd@gmail.com"},
+		{email: "A.B.C..D+001@googlemail.com", want: "abcd@googlemail.com"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, Normalize(tt.args.email), "Normalize")
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			assert.Equal(t, tt.want, Normalize(tt.email), "Normalize")
 		})
 	}
 }
 
 func TestDeleteDots(t *testing.T) {
-	type args struct {
-		localPart string
-	}
 	tests := []struct {
-		name string
-		args args
-		want string
+		localPart string
+		want      string
 	}{
-		{args: args{localPart: ""}, want: ""},
-		{args: args{localPart: "a.b"}, want: "ab"},
-		{args: args{localPart: "a.b.c"}, want: "abc"},
-		{args: args{localPart: ".a.b.c."}, want: "abc"},
-		{args: args{localPart: "a..b...c"}, want: "abc"},
+		{localPart: "", want: ""},
+		{localPart: ".", want: ""},
+		{localPart: "a.b", want: "ab"},
+		{localPart: "a.b.c", want: "abc"},
+		{localPart: ".a.b.c.", want: "abc"},
+		{localPart: "a..b...c", want: "abc"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, DeleteDots(tt.args.localPart), "DeleteDots")
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			assert.Equal(t, tt.want, DeleteDots(tt.localPart), "DeleteDots")
 		})
 	}
 }
 
 func TestCutPlusRight(t *testing.T) {
-	type args struct {
-		localPart string
-	}
 	tests := []struct {
-		name string
-		args args
-		want string
+		localPart string
+		want      string
 	}{
-		{args: args{localPart: ""}, want: ""},
-		{args: args{localPart: "a+b"}, want: "a"},
-		{args: args{localPart: "a+b+c"}, want: "a"},
-		{args: args{localPart: "+c"}, want: ""},
+		{localPart: "", want: ""},
+		{localPart: "+", want: ""},
+		{localPart: "a+b", want: "a"},
+		{localPart: "a+b+c", want: "a"},
+		{localPart: "+c", want: ""},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, CutPlusRight(tt.args.localPart), "CutPlusRight")
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			assert.Equal(t, tt.want, CutPlusRight(tt.localPart), "CutPlusRight")
 		})
 	}
 }
 
-func TestNormalizer_RegisterLocalFuncs(t *testing.T) {
-	type args struct {
-		domain string
-		funcs  NormalizeFuncs
-	}
+func Test_normalize(t *testing.T) {
 	tests := []struct {
-		name            string
-		normalizer      *Normalizer
-		args            args
-		expectedMapSize map[string]int
+		funcs NormalizeFuncs
+		str   string
+		want  string
 	}{
 		{
-			normalizer: &Normalizer{domainFuncs: NormalizeFuncs{strings.ToUpper}},
-			args: args{
-				domain: "domain",
-				funcs:  nil,
-			},
-			expectedMapSize: map[string]int{
-				"DOMAIN": 0,
-			},
+			funcs: nil,
+			str:   "a",
+			want:  "a",
 		},
 		{
-			normalizer: &Normalizer{},
-			args: args{
-				domain: "domain",
-				funcs:  NormalizeFuncs{strings.ToLower},
-			},
-			expectedMapSize: map[string]int{
-				"domain": 1,
-			},
+			funcs: NormalizeFuncs{nil},
+			str:   "a",
+			want:  "a",
 		},
 		{
-			normalizer: &Normalizer{localFuncsByDomain: map[string]NormalizeFuncs{"domain": {strings.ToLower}}},
-			args: args{
-				domain: "domain",
-				funcs:  NormalizeFuncs{strings.ToUpper, strings.ToTitle},
+			funcs: NormalizeFuncs{
+				func(s string) string { return s + "j" },
+				func(s string) string { return s + "k" },
 			},
-			expectedMapSize: map[string]int{
-				"domain": 3,
-			},
+			str:  "a",
+			want: "ajk",
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.normalizer.RegisterLocalFuncs(tt.args.domain, tt.args.funcs...)
-			mapSize := map[string]int{}
-			for key, value := range tt.normalizer.localFuncsByDomain {
-				mapSize[key] = len(value)
-			}
-			assert.Equal(t, tt.expectedMapSize, mapSize, "RegisterLocalFuncs")
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			assert.Equal(t, tt.want, normalize(tt.funcs, tt.str), "normalize")
 		})
 	}
 }
