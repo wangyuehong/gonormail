@@ -1,5 +1,11 @@
 # gonormail
-normalize email with Go.
+gonormail is a Go library to normalize email or build a email normalizer with default support of gmail.
+
+## normalization
+ - normalize the local and domain parts of email to lower case.
+ - normalize the local part for gmail
+   - delete dots(`.`) from local part.
+   - delete sub-addressing starting with(`+`).
 
 ## Usage
 

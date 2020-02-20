@@ -2,10 +2,9 @@ package gonormail
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestDefaultNormalizer(t *testing.T) {
@@ -17,7 +16,9 @@ func TestDefaultNormalizer(t *testing.T) {
 			domainGmailAlias: gmailLocalFuncs,
 		},
 	}
-	assert.Equal(t, want, DefaultNormalizer(), "DefaultNormalizer")
+	if got := DefaultNormalizer(); !reflect.DeepEqual(got, want) {
+		t.Errorf("DefaultNormalizer() = %v, want %v", got, want)
+	}
 }
 
 func TestNormalizer_Register(t *testing.T) {
@@ -87,7 +88,9 @@ func TestNormalizer_Register(t *testing.T) {
 			for _, args := range tt.argss {
 				n = n.Register(args.domain, args.funcs...)
 			}
-			assert.Equal(t, tt.want, n.Normalize(tt.email), "Register.Normalize()")
+			if got := n.Normalize(tt.email); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Normalize() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -136,7 +139,9 @@ func TestNormalizer_Normalize(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			n := NewNormalizer(tt.fields.domainFuncs, tt.fields.localFuncs, tt.fields.localFuncsByDomain)
-			assert.Equal(t, tt.want, n.Normalize(tt.email), "Normalizer.Normalize()")
+			if got := n.Normalize(tt.email); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Normalizer.Normalize() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -155,7 +160,9 @@ func TestNormalize(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			assert.Equal(t, tt.want, Normalize(tt.email), "Normalize")
+			if got := Normalize(tt.email); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Normalize() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -174,7 +181,9 @@ func TestDeleteDots(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			assert.Equal(t, tt.want, DeleteDots(tt.localPart), "DeleteDots")
+			if got := DeleteDots(tt.localPart); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DeleteDots() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -192,7 +201,9 @@ func TestCutPlusRight(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			assert.Equal(t, tt.want, CutPlusRight(tt.localPart), "CutPlusRight")
+			if got := CutPlusRight(tt.localPart); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CutPlusRight() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -224,7 +235,9 @@ func Test_normalize(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			assert.Equal(t, tt.want, normalize(tt.funcs, tt.str), "normalize")
+			if got := normalize(tt.funcs, tt.str); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("normalize() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
