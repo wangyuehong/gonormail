@@ -91,9 +91,9 @@ func (n *Normalizer) Normalize(email string) string {
 	return fmt.Sprintf("%s%s%s", localPart, AT, domainPart)
 }
 
-// RegisterLocalFuncs register normalize functions for local part by domain.
+// Register register normalize functions for local part by domain.
 // if the domain has been registered already. the functions given will be appended to the end of functions.
-func (n *Normalizer) RegisterLocalFuncs(domain string, funcs ...NormalizeFunc) *Normalizer {
+func (n *Normalizer) Register(domain string, funcs ...NormalizeFunc) *Normalizer {
 	n.mux.Lock()
 	defer n.mux.Unlock()
 

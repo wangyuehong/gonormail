@@ -20,7 +20,7 @@ func TestDefaultNormalizer(t *testing.T) {
 	assert.Equal(t, want, DefaultNormalizer(), "DefaultNormalizer")
 }
 
-func TestNormalizer_RegisterLocalFuncs(t *testing.T) {
+func TestNormalizer_Register(t *testing.T) {
 	type fields struct {
 		localFuncs         NormalizeFuncs
 		domainFuncs        NormalizeFuncs
@@ -85,9 +85,9 @@ func TestNormalizer_RegisterLocalFuncs(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			n := NewNormalizer(tt.fields.domainFuncs, tt.fields.localFuncs, tt.fields.localFuncsByDomain)
 			for _, args := range tt.argss {
-				n = n.RegisterLocalFuncs(args.domain, args.funcs...)
+				n = n.Register(args.domain, args.funcs...)
 			}
-			assert.Equal(t, tt.want, n.Normalize(tt.email), "RegisterLocalFuncs.Normalize()")
+			assert.Equal(t, tt.want, n.Normalize(tt.email), "Register.Normalize()")
 		})
 	}
 }

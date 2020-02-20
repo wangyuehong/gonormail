@@ -1,22 +1,25 @@
 # gonormail
-normalize email with Go
+normalize email with Go.
 
 ## Usage
 
-default normalize rule.
+simple normalization. email should be validated before normalization.
 ```golang
+gonormail.Normalize("Not A Email")              // Not A Email
+gonormail.Normalize("Not@A@Email")              // Not@A@Email
 gonormail.Normalize("A.B.c@Gmail.com")          // abc@gmail.com
 gonormail.Normalize("a.b.c@gmail.com")          // abc@gmail.com
 gonormail.Normalize("a.b.c+001@gmail.com")      // abc@gmail.com
 gonormail.Normalize("a.b.c+001@googlemail.com") // abc@googlemail.com
+gonormail.Normalize("a.b.c+001@whatever.com")   // a.b.c+001@whatever.com
 ```
 
 customized normalization.
 ```golang
 norm := gonormail.DefaultNormalizer().
-  RegisterLocalFuncs("live.com", gonormail.DeleteDots, gonormail.CutPlusRight).
-  RegisterLocalFuncs("hotmail.com", gonormail.CutPlusRight).
-  RegisterLocalFuncs("whatever.com", func(s string) string { return s + "+s" })
+  Register("live.com", gonormail.DeleteDots, gonormail.CutPlusRight).
+  Register("hotmail.com", gonormail.CutPlusRight).
+  Register("whatever.com", func(s string) string { return s + "+s" })
 
 norm.Normalize("A.B.c+001@Gmail.com")      // abc@gmail.com
 norm.Normalize("A.b.c+002@googlemail.com") // abc@googlemail.com
