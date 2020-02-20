@@ -67,7 +67,7 @@ func TestNewNormalizer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, NewNormalizer(tt.args.localFuncs, tt.args.domainFuncs, tt.args.funcMap), "NewNormalizer")
+			assert.Equal(t, tt.want, NewNormalizer(tt.args.domainFuncs, tt.args.localFuncs, tt.args.funcMap), "NewNormalizer")
 		})
 	}
 }
@@ -91,7 +91,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewNormalizer(tt.fields.localFuncs, tt.fields.domainFuncs, tt.fields.localFuncsByDomain)
+			n := NewNormalizer(tt.fields.domainFuncs, tt.fields.localFuncs, tt.fields.localFuncsByDomain)
 			assert.Equal(t, tt.want, n.Normalize(tt.args.email), "Normalizer.Normalize()")
 		})
 	}

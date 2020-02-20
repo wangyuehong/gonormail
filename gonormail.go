@@ -36,7 +36,7 @@ func DefaultNormalizer() *Normalizer {
 	})
 }
 
-func NewNormalizer(localFuncs, domainFuncs NormalizeFuncs, localFuncsByDomain map[string]NormalizeFuncs) *Normalizer {
+func NewNormalizer(domainFuncs, localFuncs NormalizeFuncs, localFuncsByDomain map[string]NormalizeFuncs) *Normalizer {
 	normalizedMap := make(map[string]NormalizeFuncs, len(localFuncsByDomain))
 	for domain, lfuncs := range localFuncsByDomain {
 		ndomain := normalize(domainFuncs, domain)
