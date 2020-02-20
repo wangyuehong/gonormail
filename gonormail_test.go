@@ -33,7 +33,7 @@ func TestDefaultNormalizer(t *testing.T) {
 func TestNewNormalizer(t *testing.T) {
 	domainFuncs := NormalizeFuncs{strings.ToLower}
 	localFuncs := NormalizeFuncs{strings.ToUpper}
-	funcMap := map[string]NormalizeFuncs{"whatever.com": NormalizeFuncs{strings.ToTitle}}
+	funcMap := map[string]NormalizeFuncs{"whatever.com": {strings.ToTitle}}
 
 	type args struct {
 		localFuncs  NormalizeFuncs
@@ -165,30 +165,54 @@ func TestCutPlusRight(t *testing.T) {
 
 func TestNormalizer_RegisterLocalFuncs(t *testing.T) {
 	type args struct {
-		normalizedDomain string
-		funcs            NormalizeFuncs
+		domain string
+		funcs  NormalizeFuncs
 	}
 	tests := []struct {
 		name            string
 		normalizer      *Normalizer
 		args            args
-		expectedFuncMap map[string]NormalizeFuncs
+		expectedMapSize map[string]int
 	}{
+		{
+			normalizer: &Normalizer{domainFuncs: NormalizeFuncs{strings.ToUpper}},
+			args: args{
+				domain: "domain",
+				funcs:  nil,
+			},
+			expectedMapSize: map[string]int{
+				"DOMAIN": 0,
+			},
+		},
 		{
 			normalizer: &Normalizer{},
 			args: args{
-				normalizedDomain: "hotmail.com",
-				funcs:            nil,
+				domain: "domain",
+				funcs:  NormalizeFuncs{strings.ToLower},
 			},
-			expectedFuncMap: map[string]NormalizeFuncs{
-				"hotmail.com": nil,
+			expectedMapSize: map[string]int{
+				"domain": 1,
+			},
+		},
+		{
+			normalizer: &Normalizer{localFuncsByDomain: map[string]NormalizeFuncs{"domain": {strings.ToLower}}},
+			args: args{
+				domain: "domain",
+				funcs:  NormalizeFuncs{strings.ToUpper, strings.ToTitle},
+			},
+			expectedMapSize: map[string]int{
+				"domain": 3,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.normalizer.RegisterLocalFuncs(tt.args.normalizedDomain, tt.args.funcs...)
-			assert.Equal(t, tt.expectedFuncMap, tt.normalizer.localFuncsByDomain, "RegisterLocalFuncs")
+			tt.normalizer.RegisterLocalFuncs(tt.args.domain, tt.args.funcs...)
+			mapSize := map[string]int{}
+			for key, value := range tt.normalizer.localFuncsByDomain {
+				mapSize[key] = len(value)
+			}
+			assert.Equal(t, tt.expectedMapSize, mapSize, "RegisterLocalFuncs")
 		})
 	}
 }

@@ -82,8 +82,8 @@ func (n *Normalizer) RegisterLocalFuncs(domain string, funcs ...NormalizeFunc) {
 	}
 
 	domain = normalize(n.domainFuncs, domain)
-	if existing, ok := n.localFuncsByDomain[domain]; ok {
-		existing = append(existing, funcs...)
+	if _, ok := n.localFuncsByDomain[domain]; ok {
+		n.localFuncsByDomain[domain] = append(n.localFuncsByDomain[domain], funcs...)
 	} else {
 		n.localFuncsByDomain[domain] = funcs
 	}
