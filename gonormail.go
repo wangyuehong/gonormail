@@ -6,121 +6,159 @@ import (
 	"sync"
 )
 
-const (
-	AT    = "@"
-	DOT   = "."
-	PLUS  = "+"
-	EMPTY = ""
-
-	domainGmail      = "gmail.com"
-	domainGmailAlias = "googlemail.com"
-)
-
-type NormalizeFunc func(string) string
-
-type NormalizeFuncs []NormalizeFunc
-
 var (
-	defaultFuncs         = NormalizeFuncs{strings.ToLower}
-	gmailLocalFuncs      = NormalizeFuncs{DeleteDots, CutPlusRight}
-	defaultGSuiteDomains = []string{domainGmail, domainGmailAlias}
-	defaultNormalizer    = DefaultNormalizer()
+	defaultEmailNormalizer = DefaultEmailNormalizer()
 )
 
-// Normalizer struct that holding normalization funcs.
-type Normalizer struct {
-	mux                sync.Mutex
-	localFuncs         NormalizeFuncs
-	domainFuncs        NormalizeFuncs
-	localFuncsByDomain map[string]NormalizeFuncs
+type Normalizer interface {
+	Normalize(email *EmailAddress)
 }
 
-// DefaultNormalizer create default Normalizer.
-// domainFuncs: normalize domain part to lower case.
-// localFuncs: normalize local part to lower case.
-// localFuncsByDomain: local part of gmail domain will be normalized by dot(".") deletion and plus("+") cutting.
-func DefaultNormalizer() *Normalizer {
-	localFuncsByDomain := make(map[string]NormalizeFuncs, len(defaultGSuiteDomains))
-	for _, domain := range defaultGSuiteDomains {
-		localFuncsByDomain[domain] = gmailLocalFuncs
+type NormalizeFunc func(*EmailAddress)
+
+func (n NormalizeFunc) Normalize(email *EmailAddress) {
+	if n != nil {
+		n(email)
 	}
-	return NewNormalizer(defaultFuncs, defaultFuncs, localFuncsByDomain)
 }
 
-// NewNormalizer create new Normalizer by given domainFuncs, localFuncs and localFuncsByDomain.
-func NewNormalizer(domainFuncs, localFuncs NormalizeFuncs, localFuncsByDomain map[string]NormalizeFuncs) *Normalizer {
-	normalizedMap := make(map[string]NormalizeFuncs, len(localFuncsByDomain))
-	for domain, lfuncs := range localFuncsByDomain {
-		ndomain := normalize(domainFuncs, domain)
-		if _, ok := normalizedMap[ndomain]; ok {
-			panic("duplicated normalized domain")
-		}
-		normalizedMap[ndomain] = lfuncs
-	}
-	return &Normalizer{localFuncs: localFuncs, domainFuncs: domainFuncs, localFuncsByDomain: normalizedMap}
+type EmailAddress struct {
+	Local  string
+	Domain string
 }
 
-func normalize(funcs NormalizeFuncs, str string) string {
-	for _, f := range funcs {
-		if f != nil {
-			str = f(str)
-		}
-	}
-	return str
-}
-
-// Normalize normalize given email parameter by registered functions.
-// local part and domain part of the email will by normalized by the localFuncs and domainFuncs,
-// then registered normalization functions by domain part will by applied to local part.
-// email parameter should by validated before calling this method.
-func (n *Normalizer) Normalize(email string) string {
-	splitted := strings.Split(email, AT)
+func NewEmailAddress(email string) *EmailAddress {
+	splitted := strings.Split(email, "@")
 	if len(splitted) != 2 {
+		return nil
+	}
+
+	return &EmailAddress{Local: splitted[0], Domain: splitted[1]}
+}
+
+func (e *EmailAddress) String() string {
+	return fmt.Sprintf("%s%s%s", e.Local, "@", e.Domain)
+}
+
+// EmailNormalizer struct that holding Normalizater.
+type EmailNormalizer struct {
+	mux         sync.Mutex
+	normalizers []Normalizer
+}
+
+// DefaultNormalizer ...
+func DefaultEmailNormalizer() *EmailNormalizer {
+	return NewEmailNormalizer(
+		NormalizeFunc(ToLowerCase),
+		NewDomainAlias(map[string]string{"googlemail.com": "gmail.com"}),
+		NewRemoveLocalDots("gmail.com"),
+		NewRemoveSubAddressing(map[string]string{"gmail.com": "+"}),
+	)
+}
+
+// NewEmailNormalizer create new EmailNormalizer by given Normalizer
+func NewEmailNormalizer(nrs ...Normalizer) *EmailNormalizer {
+	enr := &EmailNormalizer{}
+	return enr.AddNormalizer(nrs...)
+}
+
+// Normalize normalize given email by registered Normalizer.
+func (n *EmailNormalizer) Normalize(email string) string {
+	emailAddress := NewEmailAddress(email)
+	if emailAddress == nil {
 		return email
 	}
 
-	domainPart := normalize(n.localFuncs, splitted[1])
-	localPart := normalize(n.domainFuncs, splitted[0])
-
-	if n.localFuncsByDomain != nil {
-		if funcs, ok := n.localFuncsByDomain[domainPart]; ok {
-			localPart = normalize(funcs, localPart)
-		}
+	for _, nr := range n.normalizers {
+		nr.Normalize(emailAddress)
 	}
-
-	return fmt.Sprintf("%s%s%s", localPart, AT, domainPart)
+	return emailAddress.String()
 }
 
-// Register register normalize functions for local part by domain.
-// if the domain has been registered already. the functions given will be appended to the end of functions.
-func (n *Normalizer) Register(domain string, funcs ...NormalizeFunc) *Normalizer {
+// AddNormalizer add Normalizer.
+func (n *EmailNormalizer) AddNormalizer(nrs ...Normalizer) *EmailNormalizer {
 	n.mux.Lock()
 	defer n.mux.Unlock()
 
-	if n.localFuncsByDomain == nil {
-		n.localFuncsByDomain = map[string]NormalizeFuncs{}
-	}
-
-	domain = normalize(n.domainFuncs, domain)
-	if _, ok := n.localFuncsByDomain[domain]; ok {
-		n.localFuncsByDomain[domain] = append(n.localFuncsByDomain[domain], funcs...)
-	} else {
-		n.localFuncsByDomain[domain] = funcs
+	for _, nr := range nrs {
+		if nr != nil {
+			n.normalizers = append(n.normalizers, nr)
+		}
 	}
 	return n
 }
 
-// Normalize normalize given email by default Normalizer
+// AddFunc add func as Normalizer.
+func (n *EmailNormalizer) AddFunc(nfs ...func(*EmailAddress)) *EmailNormalizer {
+	for _, fuc := range nfs {
+		if fuc != nil {
+			n.AddNormalizer(NormalizeFunc(fuc))
+		}
+	}
+
+	return n
+}
+
+// Normalize normalizes given email by default EmailNormalizer whitch supports gmail.
 func Normalize(email string) string {
-	return defaultNormalizer.Normalize(email)
+	return defaultEmailNormalizer.Normalize(email)
 }
 
-// DeleteDots return string with all dot(".") deleted from the given local part.
-func DeleteDots(localPart string) string {
-	return strings.ReplaceAll(localPart, DOT, EMPTY)
+// ToLowerCase normalize local part and domain part to lower case.
+func ToLowerCase(email *EmailAddress) {
+	email.Local = strings.ToLower(email.Local)
+	email.Domain = strings.ToLower(email.Domain)
 }
 
-// CutPlusRight cut the first plus("+") and the right part of then given local part.
-func CutPlusRight(localPart string) string {
-	return strings.Split(localPart, PLUS)[0]
+type RemoveLocalDots struct {
+	domains map[string]struct{}
+}
+
+// NewRemoveLocalDots ...
+func NewRemoveLocalDots(domains ...string) *RemoveLocalDots {
+	domainMap := make(map[string]struct{}, len(domains))
+	for _, domain := range domains {
+		domainMap[domain] = struct{}{}
+	}
+	return &RemoveLocalDots{domains: domainMap}
+}
+
+// Normalize ...
+func (d *RemoveLocalDots) Normalize(email *EmailAddress) {
+	if _, ok := d.domains[email.Domain]; ok {
+		email.Local = strings.ReplaceAll(email.Local, ".", "")
+	}
+}
+
+type RemoveSubAddressing struct {
+	tags map[string]string
+}
+
+// NewRemoveSubAddressing returns a new Normalizer that removes sub-addressing by given domain -> tag map
+func NewRemoveSubAddressing(tags map[string]string) *RemoveSubAddressing {
+	return &RemoveSubAddressing{tags: tags}
+}
+
+// Normalize normalizes local part of the given email by removing sub-addressing.
+func (s *RemoveSubAddressing) Normalize(email *EmailAddress) {
+	if tag, ok := s.tags[email.Domain]; ok {
+		email.Local = strings.Split(email.Local, tag)[0]
+	}
+}
+
+// DomainAlias holding the map of alias -> domain
+type DomainAlias struct {
+	aliases map[string]string
+}
+
+// NewDomainAlias returns a new Normalizer that transfers domain alias to normalized domain.
+func NewDomainAlias(aliases map[string]string) *DomainAlias {
+	return &DomainAlias{aliases: aliases}
+}
+
+// Normalize normalizes domain part of the given email by aliases map.
+func (d *DomainAlias) Normalize(email *EmailAddress) {
+	if alias, ok := d.aliases[email.Domain]; ok {
+		email.Domain = alias
+	}
 }
