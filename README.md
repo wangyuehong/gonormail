@@ -1,15 +1,9 @@
 # gonormail
-gonormail is a Go library to normalize email or build a email normalizer with default support of gmail.
-
-## normalization
- - normalize the local and domain parts of email to lower case.
- - normalize the local part for gmail
-   - delete dots(`.`) from local part.
-   - delete sub-addressing starting with(`+`).
+gonormail is a Go library to normalize email or build a email normalizer with the default support of gmail.
 
 ## Usage
 
-normalization by default normalizer supported gmail. email should be validated before normalization.
+Normalization by default normalizer supported gmail. email should be validated before normalization.
 ```golang
 gonormail.Normalize("Not A Email")              // Not A Email
 gonormail.Normalize("Not@A@Email")              // Not@A@Email
@@ -20,16 +14,39 @@ gonormail.Normalize("a.b.c+001@googlemail.com") // abc@gmail.com
 gonormail.Normalize("a.b.c+001@whatever.com")   // a.b.c+001@whatever.com
 ```
 
-customized normalization.
+Customized normalization by extending the default EmailNormalizer.
 ```golang
-norm := gonormail.DefaultNormalizer().
-  Register("live.com", gonormail.DeleteDots, gonormail.DeleteSubAddr).
-  Register("hotmail.com", gonormail.DeleteSubAddr).
-  Register("whatever.com", func(s string) string { return s + "+s" })
+norm := gonormail.DefaultEmailNormalizer().
+  AddNormalizer(gonormail.NewDomainAlias(map[string]string{"examplemail.com": "email.com"})).
+  AddNormalizer(gonormail.NewRemoveLocalDots("email.com")).
+  AddNormalizer(gonormail.NewRemoveSubAddressing(map[string]string{"email.com": "-"}))
 
-norm.Normalize("A.B.c+001@Gmail.com")      // abc@gmail.com
-norm.Normalize("A.b.c+002@googlemail.com") // abc@googlemail.com
-norm.Normalize("A.B.c+003@Live.Com")       // abc@live.com
-norm.Normalize("A.B.c+004@Hotmail.Com")    // a.b.c@hotmail.com
-norm.Normalize("hello@Whatever.Com")       // hello+s@whatever.com
+norm.Normalize("A.B.c+001@Gmail.com")       // abc@email.com
+norm.Normalize("A.b.c+002@googlemail.com")  // abc@email.com
+norm.Normalize("A.B.c-003@Examplemail.Com") // abc@email.com
+norm.Normalize("A.B.c-004@Email.Com")       // abc@email.com
+```
+
+Create a new EmailNormalizer by fully customization.
+```golang
+norm := gonormail.NewEmailNormalizer().
+  AddFunc(gonormail.ToLowerCase).
+  AddNormalizer(gonormail.NewDomainAlias(map[string]string{"googlemail.com": "gmail.com", "examplemail.com": "email.com"})).
+  AddNormalizer(gonormail.NewRemoveLocalDots("email.com", "gmail.com")).
+  AddNormalizer(gonormail.NewRemoveSubAddressing(map[string]string{"email.com": "-", "gmail.com": "+"}))
+
+norm.Normalize("A.B.c+001@Gmail.com")       // abc@gmail.com
+norm.Normalize("A.b.c+002@googlemail.com")  // abc@gmail.com
+norm.Normalize("A.B.c-003@Examplemail.Com") // abc@email.com
+norm.Normalize("A.B.c-004@Email.Com")       // abc@email.com
+```
+
+Create your own Normalizer.
+```golang
+norm := gonormail.NewEmailNormalizer().
+  AddFunc(func(e *gonormail.EmailAddress) {
+    e.Local = strings.ToUpper(e.Local)
+    e.Domain = strings.ToUpper(e.Domain)
+})
+norm.Normalize("abc@email.com") // ABC@EMAIL.COM
 ```
